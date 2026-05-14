@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lens — Output Intelligence Layer · Claude</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7f6;color:#0D1B2A;min-height:100vh}
+
+  /* ── NAV ── */
+  .topbar{display:flex;align-items:center;gap:12px;padding:0 24px;height:52px;background:#fff;border-bottom:1px solid #e4eae8;position:sticky;top:0;z-index:100}
+  .topbar-logo{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;color:#0D1B2A}
+  .topbar-logo svg{width:22px;height:22px}
+  .topbar-sep{width:1px;height:20px;background:#e4eae8}
+  .topbar-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:#E1F5EE;color:#085041;letter-spacing:.04em}
+  .topbar-nav{display:flex;gap:0;margin-left:auto}
+  .topbar-btn{font-size:13px;padding:6px 14px;border:none;background:none;cursor:pointer;color:#6b8280;border-radius:6px;transition:background .15s,color .15s}
+  .topbar-btn:hover{background:#f0f5f3;color:#0D1B2A}
+  .topbar-btn.active{color:#0B6E6E;font-weight:500}
+
+  /* ── SCREENS ── */
+  .screen{display:none;animation:fadeIn .18s ease}
+  .screen.visible{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ── CHAT SCREEN ── */
+  .chat-wrap{display:grid;grid-template-columns:1fr 300px;height:calc(100vh - 52px)}
+  .chat-col{display:flex;flex-direction:column;overflow:hidden}
+  .chat-messages{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:16px}
+  .chat-input-row{padding:16px 24px;border-top:1px solid #e4eae8;background:#fff;display:flex;gap:10px;align-items:center}
+  .chat-input-row input{flex:1;padding:9px 14px;border:1px solid #d0dbd8;border-radius:8px;font-size:14px;outline:none;font-family:inherit}
+  .chat-input-row input:focus{border-color:#0B6E6E}
+  .send-btn{padding:9px 16px;background:#0B6E6E;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+  .send-btn:hover{background:#085041}
+
+  .msg-user{align-self:flex-end;max-width:72%;background:#0D1B2A;color:#fff;border-radius:12px 12px 2px 12px;padding:10px 14px;font-size:14px;line-height:1.5}
+  .msg-ai{align-self:flex-start;max-width:90%;width:100%}
+  .msg-ai-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .ai-avatar{width:28px;height:28px;border-radius:50%;background:#0B6E6E;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600;flex-shrink:0}
+  .ai-name{font-size:13px;font-weight:500;color:#0D1B2A}
+  .lens-status{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:#E1F5EE;color:#085041;margin-left:auto;cursor:pointer;border:none;letter-spacing:.03em}
+  .lens-status svg{width:13px;height:13px}
+
+  .msg-ai-body{background:#fff;border:1px solid #e4eae8;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.7;color:#0D1B2A}
+  .conf-bar{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f0f4f2}
+  .conf-label{font-size:11px;color:#6b8280;font-weight:500}
+  .conf-track{flex:1;height:4px;background:#f0f4f2;border-radius:2px;overflow:hidden}
+  .conf-fill{height:100%;border-radius:2px;transition:width .5s ease}
+  .conf-val{font-size:12px;font-weight:600;min-width:32px;text-align:right}
+
+  .hl{border-radius:2px;cursor:pointer;padding:1px 1px;transition:filter .12s}
+  .hl:hover{filter:brightness(.92)}
+  .hl-ok{background:#E1F5EE;border-bottom:1.5px solid #1D9E75}
+  .hl-warn{background:#FFF3DC;border-bottom:1.5px solid #BA7517}
+  .hl-gap{background:#FDECEA;border-bottom:1.5px dotted #E24B4A}
+  .hl-unc{background:#EEEDFE;border-bottom:1.5px dashed #7F77DD}
+  .itag{font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;vertical-align:middle;margin-left:3px}
+  .itag-a{background:#EEEDFE;color:#3C3489}
+  .itag-g{background:#FDECEA;color:#A32D2D}
+  .itag-u{background:#FFF3DC;color:#633806}
+
+  .action-chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+  .chip{font-size:12px;padding:5px 11px;border:1px solid #d0dbd8;border-radius:20px;cursor:pointer;background:#fff;color:#0D1B2A;transition:background .12s,border-color .12s;display:flex;align-items:center;gap:5px}
+  .chip:hover{background:#f0f5f3;border-color:#0B6E6E;color:#0B6E6E}
+  .chip svg{width:13px;height:13px}
+
+  /* ── LENS PANEL ── */
+  .lens-panel{border-left:1px solid #e4eae8;background:#fafcfb;overflow-y:auto;display:flex;flex-direction:column}
+  .lens-panel-header{padding:14px 16px 10px;border-bottom:1px solid #e4eae8;display:flex;align-items:center;gap:7px}
+  .lens-panel-title{font-size:13px;font-weight:600;color:#0D1B2A}
+  .lens-section{border-bottom:1px solid #e4eae8}
+  .lens-section-hd{display:flex;align-items:center;gap:7px;padding:10px 14px;cursor:pointer;font-size:12px;font-weight:500;color:#0D1B2A;user-select:none}
+  .lens-section-hd svg{width:14px;height:14px;color:#6b8280;flex-shrink:0}
+  .lens-section-hd .chev{margin-left:auto;transition:transform .2s;color:#6b8280}
+  .lens-section-hd .chev.open{transform:rotate(180deg)}
+  .lens-section-body{padding:0 14px 12px}
+
+  .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .score-card{background:#f0f5f3;border-radius:7px;padding:8px 10px}
+  .score-card-label{font-size:10px;color:#6b8280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .score-card-row{display:flex;align-items:center;gap:6px}
+  .score-num{font-size:18px;font-weight:600}
+  .score-trk{flex:1;height:3px;background:#e4eae8;border-radius:2px;overflow:hidden}
+  .score-fill{height:100%;border-radius:2px}
+
+  .flag{display:flex;gap:8px;padding:7px 0;border-bottom:1px solid #f0f4f2;cursor:pointer;border-radius:5px;padding-left:3px;transition:background .1s}
+  .flag:last-child{border-bottom:none}
+  .flag:hover{background:#f0f5f3}
+  .fdot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0}
+  .flag-text{font-size:12px;line-height:1.4;color:#0D1B2A}
+  .flag-sub{font-size:10px;color:#6b8280;margin-top:1px}
+
+  .alt-card{background:#f0f5f3;border-radius:7px;padding:8px 10px;font-size:12px;color:#4A6663;line-height:1.5;margin-bottom:6px;border-left:2px solid #AFA9EC}
+  .alt-card strong{color:#0D1B2A;font-weight:500}
+  .alt-card:last-child{margin-bottom:0}
+
+  .rtrace{display:flex;gap:8px;padding:5px 0}
+  .rstep{width:18px;height:18px;border-radius:50%;background:#f0f5f3;border:1px solid #d0dbd8;font-size:10px;font-weight:600;color:#6b8280;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+  .rtrace-text{font-size:12px;color:#4A6663;line-height:1.5}
+  .rtrace-text strong{color:#0D1B2A;font-weight:500}
+
+  .judgment-box{margin:12px 14px;background:#E1F5EE;border-radius:8px;padding:10px 12px;font-size:12px;color:#085041;display:flex;gap:7px;align-items:flex-start;line-height:1.5}
+  .judgment-box svg{width:14px;height:14px;flex-shrink:0;margin-top:1px}
+
+  /* ── CALIBRATION ── */
+  .calib-wrap{max-width:700px;margin:0 auto;padding:32px 24px}
+  .calib-header{margin-bottom:24px}
+  .calib-header h1{font-size:22px;font-weight:600;margin-bottom:6px}
+  .calib-header p{font-size:14px;color:#4A6663;line-height:1.6}
+  .domain-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+  .domain-card{border:1px solid #e4eae8;border-radius:10px;padding:14px 12px;cursor:pointer;transition:border-color .15s,background .15s;background:#fff;text-align:center}
+  .domain-card:hover{border-color:#0B6E6E;background:#f0f5f3}
+  .domain-card.sel{border-color:#0B6E6E;background:#E1F5EE}
+  .domain-card svg{width:22px;height:22px;color:#0B6E6E;margin-bottom:8px}
+  .domain-card .dt{font-size:13px;font-weight:500;margin-bottom:3px}
+  .domain-card .dd{font-size:11px;color:#6b8280;line-height:1.3}
+
+  .ex-card{background:#fff;border:1px solid #e4eae8;border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .ex-header{padding:10px 16px;background:#f5f7f6;border-bottom:1px solid #e4eae8;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500}
+  .ex-body{padding:18px}
+  .prog-row{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .prog-trk{flex:1;height:4px;background:#f0f4f2;border-radius:2px;overflow:hidden}
+  .prog-fill{height:100%;background:#0B6E6E;border-radius:2px;transition:width .4s ease}
+  .prog-label{font-size:12px;color:#6b8280}
+  .dots{display:flex;gap:4px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#e4eae8;border:1px solid #d0dbd8}
+  .dot.done{background:#0B6E6E;border-color:#0B6E6E}
+
+  .snippet{background:#f5f7f6;border-radius:8px;padding:12px 14px;font-size:13px;font-style:italic;color:#0D1B2A;line-height:1.6;margin-bottom:16px;border-left:3px solid #d0dbd8}
+  .ex-q{font-size:14px;font-weight:500;margin-bottom:12px}
+  .opt{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid #e4eae8;border-radius:8px;cursor:pointer;font-size:13px;color:#0D1B2A;transition:background .12s,border-color .12s;margin-bottom:7px;background:#fff;width:100%;text-align:left}
+  .opt:hover:not(.locked){background:#f5f7f6}
+  .opt.correct{background:#E1F5EE;border-color:#1D9E75;color:#085041}
+  .opt.wrong{background:#FDECEA;border-color:#E24B4A;color:#7a1f1f}
+  .opt.show-correct{border-color:#1D9E75}
+  .opt .radio{width:16px;height:16px;border-radius:50%;border:1.5px solid #d0dbd8;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center}
+  .opt.correct .radio{border-color:#1D9E75;background:#1D9E75}
+  .opt.correct .radio::after,.opt.show-correct .radio::after{content:'';width:6px;height:6px;border-radius:50%;background:#fff;display:block}
+  .opt.show-correct .radio{border-color:#1D9E75;background:#1D9E75}
+  .opt.wrong .radio{border-color:#E24B4A}
+
+  .feedback{background:#f5f7f6;border-radius:8px;padding:12px 14px;font-size:13px;color:#4A6663;line-height:1.5;border-left:3px solid #0B6E6E;margin-top:10px;display:none}
+  .feedback.show{display:block}
+  .feedback strong{color:#0D1B2A;font-weight:500}
+
+  .ex-actions{display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap}
+  .btn-primary{padding:8px 18px;background:#0B6E6E;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;display:none}
+  .btn-primary:hover{background:#085041}
+  .btn-primary.show{display:inline-flex;align-items:center;gap:6px}
+  .btn-secondary{padding:8px 14px;background:#fff;color:#0D1B2A;border:1px solid #d0dbd8;border-radius:8px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px}
+  .btn-secondary:hover{background:#f0f5f3}
+  .btn-secondary svg{width:13px;height:13px}
+
+  .insight{background:#EEEDFE;border-radius:10px;overflow:hidden;margin-top:4px}
+  .insight-hd{padding:10px 14px;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:500;color:#3C3489}
+  .insight-hd svg{width:15px;height:15px}
+  .insight-body{padding:0 14px 14px;font-size:13px;color:#3C3489;line-height:1.6}
+
+  /* ── TOOLTIP ── */
+  .tooltip{position:absolute;background:#0D1B2A;color:#fff;font-size:12px;padding:8px 11px;border-radius:7px;max-width:220px;line-height:1.5;pointer-events:none;display:none;z-index:200}
+  .tooltip-title{font-weight:600;margin-bottom:3px;font-size:12px}
+  .tooltip-body{color:#A8D5CF;font-size:11px}
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar{width:5px;height:5px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#d0dbd8;border-radius:10px}
+
+  /* ── TYPING INDICATOR ── */
+  .typing{display:flex;gap:4px;align-items:center;padding:8px 4px}
+  .typing span{width:6px;height:6px;border-radius:50%;background:#A8D5CF;animation:bounce .9s infinite}
+  .typing span:nth-child(2){animation-delay:.18s}
+  .typing span:nth-child(3){animation-delay:.36s}
+  @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#0B6E6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="3"/><path d="M11 2v2M11 20v2M2 11h2M20 11h2"/><path d="M11 8V5M8 11H5M11 14v3M14 11h3"/></svg>
+    Lens
+  </div>
+  <div class="topbar-sep"></div>
+  <div class="topbar-pill">Beta</div>
+  <nav class="topbar-nav">
+    <button class="topbar-btn active" onclick="showScreen('chat')">Chat</button>
+    <button class="topbar-btn" onclick="showScreen('calib')">Calibration mode</button>
+  </nav>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tt-title"></div>
+  <div class="tooltip-body" id="tt-body"></div>
+</div>
+
+<!-- ════════════════════ CHAT SCREEN ════════════════════ -->
+<div class="screen visible" id="screen-chat">
+  <div class="chat-wrap">
+    <div class="chat-col">
+      <div class="chat-messages" id="chat-messages">
+
+        <!-- User message -->
+        <div class="msg-user">Explain the main reasons for Apple's revenue growth over the past 5 years and whether it's sustainable.</div>
+
+        <!-- AI response -->
+        <div class="msg-ai" id="ai-msg" style="display:none">
+          <div class="msg-ai-header">
+            <div class="ai-avatar">C</div>
+            <span class="ai-name">Claude</span>
+            <button class="lens-status" onclick="togglePanel()" title="Toggle Lens panel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="4"/><path d="m21 21-4.35-4.35"/><path d="M11 7v4M9 9h4"/></svg>
+              Lens active
+            </button>
+          </div>
+          <div class="msg-ai-body">
+            <div class="conf-bar">
+              <span class="conf-label">Overall confidence</span>
+              <div class="conf-track"><div class="conf-fill" style="width:64%;background:#BA7517"></div></div>
+              <span class="conf-val" style="color:#BA7517">64%</span>
+            </div>
+            Apple's revenue growth over the past five years has been driven by three major factors.<br><br>
+            First, <span class="hl hl-ok" onmouseenter="showTip(event,'Well-supported','Services grew from $46B in FY2019 to ~$85B in FY2023 — directly verifiable from Apple earnings reports.')" onmouseleave="hideTip()">the Services segment has become Apple's fastest-growing category</span>, now representing over 22% of revenue, driven by the App Store, iCloud, Apple TV+, and Apple Pay.<br><br>
+            Second, <span class="hl hl-warn" onmouseenter="showTip(event,'Weak reasoning','Attributing iPhone revenue growth primarily to pricing is oversimplified. Unit volume and geographic expansion are equally significant drivers.')" onmouseleave="hideTip()">iPhone revenue growth has been sustained by premium pricing strategy</span><span class="itag itag-a">assumption</span>, with average selling prices rising significantly since 2018.<br><br>
+            Third, <span class="hl hl-gap" onmouseenter="showTip(event,'Missing context','Omits China revenue concentration risk, FX headwinds, and regulatory exposure — all material for a sustainability assessment.')" onmouseleave="hideTip()">geographic expansion into emerging markets has contributed meaningfully</span><span class="itag itag-g">gap</span> to topline growth.<br><br>
+            As for sustainability, <span class="hl hl-unc" onmouseenter="showTip(event,'High uncertainty','This presents one plausible scenario but omits regulatory risk (EU DMA), App Store antitrust proceedings, and competitive Services dynamics.')" onmouseleave="hideTip()">this trajectory appears sustainable given the recurring nature of services revenue</span><span class="itag itag-u">uncertain</span> and Apple's loyal customer base.
+          </div>
+          <div class="action-chips">
+            <button class="chip" onclick="addUserMsg('What are the key risks to Apple\'s revenue sustainability I should verify?')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              Ask about risks
+            </button>
+            <button class="chip" onclick="addUserMsg('What sources should I check to verify these claims about Apple?')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              Sources to verify
+            </button>
+            <button class="chip" onclick="addUserMsg('Give me an alternative perspective on whether Apple\'s growth is actually sustainable')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              Alternative view
+            </button>
+          </div>
+        </div>
+
+        <!-- Typing indicator placeholder -->
+        <div class="msg-ai" id="typing-indicator" style="display:none">
+          <div class="msg-ai-header">
+            <div class="ai-avatar">C</div>
+            <span class="ai-name">Claude</span>
+          </div>
+          <div class="msg-ai-body" style="padding:4px 8px">
+            <div class="typing"><span></span><span></span><span></span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Input -->
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Ask a follow-up or type a new question…" onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="send-btn" onclick="sendChat()">Send</button>
+      </div>
+    </div>
+
+    <!-- LENS PANEL -->
+    <div class="lens-panel" id="lens-panel">
+      <div class="lens-panel-header">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0B6E6E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="4"/><path d="m21 21-4.35-4.35"/><path d="M11 7v4M9 9h4"/></svg>
+        <span class="lens-panel-title">Lens evaluation</span>
+      </div>
+
+      <!-- Scores -->
+      <div class="lens-section">
+        <div class="lens-section-hd" onclick="toggleSec(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+          Output quality scores
+          <svg class="chev open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="lens-section-body">
+          <div class="score-grid">
+            <div class="score-card">
+              <div class="score-card-label">Correctness</div>
+              <div class="score-card-row">
+                <span class="score-num" style="color:#1D9E75">72</span>
+                <div class="score-trk"><div class="score-fill" style="width:72%;background:#1D9E75"></div></div>
+              </div>
+            </div>
+            <div class="score-card">
+              <div class="score-card-label">Completeness</div>
+              <div class="score-card-row">
+                <span class="score-num" style="color:#E24B4A">51</span>
+                <div class="score-trk"><div class="score-fill" style="width:51%;background:#E24B4A"></div></div>
+              </div>
+            </div>
+            <div class="score-card">
+              <div class="score-card-label">Reasoning</div>
+              <div class="score-card-row">
+                <span class="score-num" style="color:#BA7517">58</span>
+                <div class="score-trk"><div class="score-fill" style="width:58%;background:#BA7517"></div></div>
+              </div>
+            </div>
+            <div class="score-card">
+              <div class="score-card-label">Usefulness</div>
+              <div class="score-card-row">
+                <span class="score-num" style="color:#1D9E75">74</span>
+                <div class="score-trk"><div class="score-fill" style="width:74%;background:#1D9E75"></div></div>
+              </div>
+            </div>
+          </div>
+          <p style="font-size:11px;color:#6b8280;margin-top:8px;line-height:1.4"><strong style="color:#0D1B2A">Completeness is low</strong> — key risk factors are absent for a sustainability question.</p>
+        </div>
+      </div>
+
+      <!-- Flags -->
+      <div class="lens-section">
+        <div class="lens-section-hd" onclick="toggleSec(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+          Flags to review
+          <svg class="chev open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="lens-section-body">
+          <div class="flag" onclick="pulseHighlight('hl-warn')">
+            <div class="fdot" style="background:#BA7517"></div>
+            <div>
+              <div class="flag-text">Weak reasoning on iPhone pricing</div>
+              <div class="flag-sub">Oversimplified causal claim</div>
+            </div>
+          </div>
+          <div class="flag" onclick="pulseHighlight('hl-gap')">
+            <div class="fdot" style="background:#E24B4A"></div>
+            <div>
+              <div class="flag-text">Missing: China risk, FX headwinds, regulatory exposure</div>
+              <div class="flag-sub">Material omissions for sustainability assessment</div>
+            </div>
+          </div>
+          <div class="flag" onclick="pulseHighlight('hl-unc')">
+            <div class="fdot" style="background:#7F77DD"></div>
+            <div>
+              <div class="flag-text">Sustainability conclusion is overconfident</div>
+              <div class="flag-sub">Single scenario presented, high uncertainty</div>
+            </div>
+          </div>
+          <div class="flag">
+            <div class="fdot" style="background:#1D9E75"></div>
+            <div>
+              <div class="flag-text">Services growth data is well-grounded</div>
+              <div class="flag-sub">Aligns with public financials</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alternatives -->
+      <div class="lens-section">
+        <div class="lens-section-hd" onclick="toggleSec(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          Alternative perspectives
+          <svg class="chev open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="lens-section-body">
+          <div class="alt-card"><strong>Bear case:</strong> Services faces regulatory headwinds (EU DMA, App Store antitrust). China revenue concentration creates geopolitical risk. Hardware saturation limits new growth vectors.</div>
+          <div class="alt-card"><strong>Analyst divergence:</strong> Morgan Stanley and Bernstein hold opposing views on Services margin sustainability — not reflected in this output.</div>
+        </div>
+      </div>
+
+      <!-- Reasoning trace -->
+      <div class="lens-section">
+        <div class="lens-section-hd" onclick="toggleSec(this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Reasoning trace
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="lens-section-body" style="display:none">
+          <div class="rtrace"><div class="rstep">1</div><div class="rtrace-text"><strong>Assumed:</strong> Public-facing narrative, not financial modeling.</div></div>
+          <div class="rtrace"><div class="rstep">2</div><div class="rtrace-text"><strong>Drew on:</strong> Publicly known revenue categories. No real-time financials.</div></div>
+          <div class="rtrace"><div class="rstep">3</div><div class="rtrace-text"><strong>Skipped:</strong> Country-level breakdown, margin analysis, wearables.</div></div>
+          <div class="rtrace"><div class="rstep">4</div><div class="rtrace-text"><strong>Uncertainty:</strong> Knowledge cutoff limits currency of post-2023 claims.</div></div>
+          <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap">
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:#EEEDFE;color:#3C3489">Assumes public context</span>
+            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:#EEEDFE;color:#3C3489">No real-time data</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Judgment prompt -->
+      <div class="judgment-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><polyline points="12 11 12 11"/></svg>
+        <span><strong>Your judgment needed:</strong> The sustainability conclusion requires your domain knowledge. Verify with recent earnings reports and analyst consensus before relying on this answer.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ CALIBRATION SCREEN ════════════════════ -->
+<div class="screen" id="screen-calib">
+  <div class="calib-wrap">
+    <div class="calib-header">
+      <h1>Calibration mode</h1>
+      <p>Short exercises to build your evaluation intuition — spot weak reasoning, missing context, and overconfidence in AI outputs. Pick a domain to practice in.</p>
+    </div>
+
+    <div class="domain-grid">
+      <div class="domain-card sel" onclick="selectDomain(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <div class="dt">Research</div>
+        <div class="dd">Analysis &amp; fact evaluation</div>
+      </div>
+      <div class="domain-card" onclick="selectDomain(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <div class="dt">Content writing</div>
+        <div class="dd">Arguments &amp; persuasion</div>
+      </div>
+      <div class="domain-card" onclick="selectDomain(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <div class="dt">Career prep</div>
+        <div class="dd">Resumes &amp; interview advice</div>
+      </div>
+      <div class="domain-card" onclick="selectDomain(this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        <div class="dt">Code review</div>
+        <div class="dd">Logic &amp; completeness</div>
+      </div>
+    </div>
+
+    <div class="ex-card">
+      <div class="ex-header">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B6E6E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span id="ex-label">Exercise 1 of 3 — Spot the flaw</span>
+        <span style="margin-left:auto;font-size:11px;color:#6b8280" id="ex-domain">Research domain</span>
+      </div>
+      <div class="ex-body">
+        <div class="prog-row">
+          <span class="prog-label">Progress</span>
+          <div class="prog-trk"><div class="prog-fill" id="prog-fill" style="width:33%"></div></div>
+          <span class="prog-label" id="prog-txt">1 / 3</span>
+          <div class="dots">
+            <div class="dot" id="d0"></div>
+            <div class="dot" id="d1"></div>
+            <div class="dot" id="d2"></div>
+          </div>
+        </div>
+
+        <div class="snippet" id="ex-snippet">"Remote work has clearly increased employee productivity across all industries. Studies show that remote workers are 13% more productive, and companies like Twitter and Airbnb have adopted permanent remote policies — demonstrating that this model is universally superior for knowledge work."</div>
+
+        <div class="ex-q" id="ex-question">What is the primary flaw in this AI-generated passage?</div>
+
+        <div id="opts-container">
+          <button class="opt" onclick="pickOpt(this,false)"><span class="radio"></span>The 13% statistic is entirely fabricated</button>
+          <button class="opt" onclick="pickOpt(this,false)"><span class="radio"></span>The conclusion is valid — it just needs more examples</button>
+          <button class="opt" onclick="pickOpt(this,true)"><span class="radio"></span>It overgeneralizes from limited evidence and cherry-picks examples</button>
+          <button class="opt" onclick="pickOpt(this,false)"><span class="radio"></span>The writing style is too informal for a research context</button>
+        </div>
+
+        <div class="feedback" id="ex-feedback">
+          <strong>Correct.</strong> The 13% figure comes from one Stanford study on call-center workers in China — a narrow context. The output then uses corporate policy decisions as if they constitute evidence, and concludes with "universally superior" — an extreme claim unsupported by the evidence cited.<br><br>
+          In Lens, this would be flagged as: <strong>overgeneralization + cherry-picked examples + overconfident conclusion</strong>.
+        </div>
+
+        <div class="ex-actions">
+          <button class="btn-primary" id="btn-next" onclick="nextExercise()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            Next exercise
+          </button>
+          <button class="btn-secondary" onclick="showScreen('chat')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Back to chat
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="insight" id="insight-box" style="display:none">
+      <div class="insight-hd">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+        Your calibration insight
+      </div>
+      <div class="insight-body">
+        Based on your responses, you tend to <strong>miss overgeneralization</strong> more than other flaws. Polished, confident language makes sweeping claims feel more grounded than they are.<br><br>
+        <strong>Practice tip:</strong> When an output uses "clearly," "all," "universally," or "demonstrates that" — pause. Ask: what evidence would disprove this?
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const exercises = [
+  {
+    snippet: '"Remote work has clearly increased employee productivity across all industries. Studies show that remote workers are 13% more productive, and companies like Twitter and Airbnb have adopted permanent remote policies — demonstrating that this model is universally superior for knowledge work."',
+    question: 'What is the primary flaw in this AI-generated passage?',
+    opts: [
+      {t:'The 13% statistic is entirely fabricated', c:false},
+      {t:'The conclusion is valid — it just needs more examples', c:false},
+      {t:'It overgeneralizes from limited evidence and cherry-picks examples', c:true},
+      {t:'The writing style is too informal for a research context', c:false},
+    ],
+    feedback: '<strong>Correct.</strong> The 13% figure comes from one Stanford study on call-center workers in China — a narrow context. Corporate policy decisions are not evidence of universal superiority. "Universally superior" is an extreme overconfident claim.<br><br>In Lens, this would be flagged as: <strong>overgeneralization + cherry-picked examples + overconfident conclusion</strong>.'
+  },
+  {
+    snippet: '"The primary cause of the 2008 financial crisis was excessive risk-taking by investment banks. The repeal of Glass-Steagall in 1999 removed key regulatory barriers, and banks subsequently loaded up on mortgage-backed securities, triggering systemic collapse when housing prices fell."',
+    question: 'Which evaluation concern is most significant here?',
+    opts: [
+      {t:'This is factually incorrect — Glass-Steagall was not repealed in 1999', c:false},
+      {t:'The explanation is accurate and complete — no major concerns', c:false},
+      {t:'It presents one causal narrative as definitive when multiple contested causes exist', c:true},
+      {t:'The financial terminology is used incorrectly', c:false},
+    ],
+    feedback: '<strong>Correct.</strong> The core facts are reasonable but the 2008 crisis is one of economics\' most debated events. This output omits Fed policy, regulatory capture, rating agency failure, and global capital flows. Presenting one narrative as "the" cause is an <strong>overconfident causal claim</strong> — a key Lens flag type.'
+  },
+  {
+    snippet: '"For your product manager interview at Google, emphasize your data-driven approach and mention your experience with OKRs. Google values candidates who can demonstrate impact through measurable outcomes and who have worked cross-functionally at scale."',
+    question: 'What should you be most cautious about before acting on this advice?',
+    opts: [
+      {t:'The advice mentions OKRs incorrectly — Google does not use them', c:false},
+      {t:'This is generic advice that may not reflect the specific role, team, or interviewer', c:true},
+      {t:'The advice is too specific — it should be more general', c:false},
+      {t:'Nothing — this advice is solid and actionable as-is', c:false},
+    ],
+    feedback: '<strong>Correct.</strong> This sounds helpful and specific, but is actually a high-confidence generalization. It omits which PM role/level, which product area, what the interviewer values. Google PM interviews vary significantly by team.<br><br><strong>Usefulness: medium. Completeness for high-stakes action: low.</strong> Lens would flag: "This advice is for the general case — verify with a recruiter or team-specific prep."'
+  }
+];
+
+let exIdx = 0;
+let exAnswered = false;
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('visible'));
+  document.getElementById('screen-' + name).classList.add('visible');
+  document.querySelectorAll('.topbar-btn').forEach(b => b.classList.remove('active'));
+  if(name === 'chat') document.querySelectorAll('.topbar-btn')[0].classList.add('active');
+  else document.querySelectorAll('.topbar-btn')[1].classList.add('active');
+
+  if(name === 'chat') {
+    setTimeout(revealAIMessage, 400);
+  }
+}
+
+let aiShown = false;
+function revealAIMessage() {
+  if(aiShown) return;
+  const typing = document.getElementById('typing-indicator');
+  typing.style.display = 'block';
+  scrollChat();
+  setTimeout(() => {
+    typing.style.display = 'none';
+    document.getElementById('ai-msg').style.display = 'block';
+    scrollChat();
+    aiShown = true;
+  }, 1400);
+}
+
+function scrollChat() {
+  const c = document.getElementById('chat-messages');
+  c.scrollTop = c.scrollHeight;
+}
+
+function togglePanel() {
+  const p = document.getElementById('lens-panel');
+  p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+
+function toggleSec(hd) {
+  const body = hd.nextElementSibling;
+  const chev = hd.querySelector('.chev');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  chev.classList.toggle('open', !isOpen);
+}
+
+function showTip(e, title, body) {
+  const tt = document.getElementById('tooltip');
+  document.getElementById('tt-title').textContent = title;
+  document.getElementById('tt-body').textContent = body;
+  tt.style.display = 'block';
+  tt.style.left = Math.min(e.clientX + 12, window.innerWidth - 240) + 'px';
+  tt.style.top = (e.clientY + 16) + 'px';
+}
+function hideTip() {
+  document.getElementById('tooltip').style.display = 'none';
+}
+
+function pulseHighlight(cls) {
+  document.querySelectorAll('.' + cls).forEach(el => {
+    el.style.outline = '2px solid currentColor';
+    setTimeout(() => el.style.outline = '', 1800);
+  });
+  document.querySelectorAll('.' + cls)[0]?.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function addUserMsg(text) {
+  const msgs = document.getElementById('chat-messages');
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-user';
+  bubble.textContent = text;
+  msgs.appendChild(bubble);
+
+  const typing = document.getElementById('typing-indicator');
+  typing.style.display = 'block';
+  scrollChat();
+
+  setTimeout(() => {
+    typing.style.display = 'none';
+    const replies = {
+      'risks': 'Key risks to verify independently: (1) EU Digital Markets Act impact on App Store economics — analyst estimates vary widely; (2) China revenue ~19% of total, exposed to geopolitical friction; (3) Services gross margin compression if regulatory settlements force fee reductions; (4) Vision Pro and new hardware category ROI timeline. I\'d strongly recommend checking Apple\'s most recent 10-K and earnings call transcripts for management\'s own risk disclosures.',
+      'sources': 'For verifying these Apple claims: Apple\'s annual 10-K filings (investor.apple.com) for segment revenue data; Statista or Counterpoint Research for iPhone ASP trends; Bloomberg Intelligence or Morgan Stanley equity research for Services margin analysis; the EU Commission\'s DMA enforcement tracker for regulatory exposure. Most reliable primary source is always Apple\'s own earnings reports.',
+      'alternative': 'The bear case on Apple\'s sustainability: Services growth faces structural headwinds — the EU DMA requires Apple to allow third-party app stores, potentially eroding App Store economics significantly. China dependency (~19% of revenue) creates concentration risk that premium pricing cannot offset if geopolitical friction intensifies. Hardware upgrade cycles are lengthening. The bull case assumes regulatory outcomes are benign and Services margins hold — neither is certain.'
+    };
+    const key = text.includes('risk') ? 'risks' : text.includes('source') ? 'sources' : 'alternative';
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'msg-ai';
+    aiDiv.innerHTML = `<div class="msg-ai-header"><div class="ai-avatar">C</div><span class="ai-name">Claude</span></div><div class="msg-ai-body" style="font-size:14px;line-height:1.7">${replies[key]}</div>`;
+    msgs.appendChild(aiDiv);
+    scrollChat();
+  }, 1600);
+}
+
+function sendChat() {
+  const inp = document.getElementById('chat-input');
+  const val = inp.value.trim();
+  if(!val) return;
+  inp.value = '';
+  addUserMsg(val);
+}
+
+function selectDomain(el) {
+  document.querySelectorAll('.domain-card').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+function pickOpt(el, isCorrect) {
+  if(exAnswered) return;
+  exAnswered = true;
+  const opts = document.querySelectorAll('#opts-container .opt');
+  opts.forEach(o => {
+    o.classList.add('locked');
+    const oCorrect = o.onclick.toString().includes('true');
+    if(oCorrect && o !== el) o.classList.add('show-correct');
+  });
+  el.classList.add(isCorrect ? 'correct' : 'wrong');
+  if(isCorrect) document.getElementById('d' + exIdx).classList.add('done');
+  document.getElementById('ex-feedback').innerHTML = exercises[exIdx].feedback;
+  document.getElementById('ex-feedback').classList.add('show');
+  document.getElementById('btn-next').classList.add('show');
+  if(exIdx >= 2) {
+    document.getElementById('btn-next').textContent = 'See my insight';
+    document.getElementById('btn-next').onclick = showInsight;
+  }
+}
+
+function nextExercise() {
+  exIdx++;
+  if(exIdx >= exercises.length) { showInsight(); return; }
+  exAnswered = false;
+  const ex = exercises[exIdx];
+  document.getElementById('ex-snippet').textContent = ex.snippet;
+  document.getElementById('ex-question').textContent = ex.question;
+  document.getElementById('ex-feedback').classList.remove('show');
+  document.getElementById('ex-label').textContent = `Exercise ${exIdx+1} of 3 — Spot the flaw`;
+  document.getElementById('prog-fill').style.width = ((exIdx+1)/3*100) + '%';
+  document.getElementById('prog-txt').textContent = `${exIdx+1} / 3`;
+  document.getElementById('btn-next').classList.remove('show');
+
+  const container = document.getElementById('opts-container');
+  container.innerHTML = '';
+  ex.opts.forEach(o => {
+    const btn = document.createElement('button');
+    btn.className = 'opt';
+    btn.innerHTML = `<span class="radio"></span>${o.t}`;
+    btn.onclick = function(){ pickOpt(this, o.c); };
+    container.appendChild(btn);
+  });
+  document.getElementById('ex-feedback').innerHTML = ex.feedback;
+}
+
+function showInsight() {
+  document.getElementById('btn-next').style.display = 'none';
+  document.getElementById('insight-box').style.display = 'block';
+  document.getElementById('insight-box').scrollIntoView({behavior:'smooth'});
+}
+
+setTimeout(revealAIMessage, 600);
+</script>
+</body>
+</html>
